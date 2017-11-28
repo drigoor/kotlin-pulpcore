@@ -28,47 +28,60 @@ object CoreMath {
 
     @JvmField
     val FRACTION_MASK = (1 shl FRACTION_BITS) - 1
+    // 65535
 
     @JvmField
     val ONE = 1 shl FRACTION_BITS
+    // 65536
 
     @JvmField
     val ONE_HALF = ONE shr 1
+    // 32768
 
     @JvmField
     val PI = Math.round(Math.PI * ONE.toDouble()).toInt()
+    // 205887
 
     @JvmField
     val TWO_PI = Math.round(2.0 * Math.PI * ONE.toDouble()).toInt()
+    // 41775
 
     @JvmField
     val ONE_HALF_PI = Math.round(0.5 * Math.PI * ONE.toDouble()).toInt()
+    // 102944
 
     @JvmField
     val E = Math.round(Math.E * ONE.toDouble()).toInt()
+    // 178145
 
     @JvmField
     val MAX_VALUE = Int.MAX_VALUE // (1 shl 31) -1
+    // 2147483647
 
     @JvmField
     val MIN_VALUE = Int.MIN_VALUE // -(1 shl 31)
+    // -2147483648
 
     /** The maximum integer value that a 32-bit fixed-point value can represent.  */
     @JvmField
     val MAX_INT_VALUE = Short.MAX_VALUE.toInt() // (1 shl 31 - FRACTION_BITS) - 1
+    // 32767
 
     /** The minimum integer value that a 32-bit fixed-point value can represent.  */
     @JvmField
     val MIN_INT_VALUE = Short.MIN_VALUE.toInt() // -(1 shl 31 - FRACTION_BITS)
+    // -32768
 
     /** The maximum 32-bit floating-point value that a 32-bit fixed-point value can represent.  */
     // Math.round(MAX_FLOAT_VALUE * ONE) = MAX_VALUE
     @JvmField
     val MAX_FLOAT_VALUE = Short.MAX_VALUE.toFloat() // 32768f
+    // 32768
 
     /** The minimum 32-bit floating-point value that a 32-bit fixed-point value can represent.  */
     @JvmField
     val MIN_FLOAT_VALUE = -Short.MAX_VALUE.toFloat() // -32768f
+    // -32768
 
     /** The maximum 64-bit floating-point value that a 32-bit fixed-point value can represent.  */
     // Found this by trial and error
@@ -79,13 +92,14 @@ object CoreMath {
     /** The minimum 64-bit floating-point value that a 32-bit fixed-point value can represent.  */
     @JvmField
     val MIN_DOUBLE_VALUE = -Short.MAX_VALUE.toDouble() // -32768.0
+    // -32768
 
     // For more accurate results for sine/cosine. This number was found by trial and error.
     private val TWO_PI_ERROR_FACTOR = 6
 
     //private static final int TWO_PI_ERROR = -11;
-    private val TWO_PI_ERROR = Math.round((2.0 * Math.PI * (1 shl TWO_PI_ERROR_FACTOR).toDouble() -
-            ((TWO_PI shl TWO_PI_ERROR_FACTOR) / ONE).toDouble()) * ONE).toInt()
+    private val TWO_PI_ERROR = Math.round(((2.0 * Math.PI * (1 shl TWO_PI_ERROR_FACTOR).toDouble()) - ((TWO_PI shl TWO_PI_ERROR_FACTOR).toDouble() / ONE.toDouble())) * ONE.toDouble()).toInt()
+    // -11
 
     /** Number of fractional bits used for some internal calculations  */
     private val INTERNAL_BITS = 24
@@ -203,7 +217,7 @@ object CoreMath {
      * @param maxFracDigits the maximum number of digits to show after
      * the decimal point.
      * @param grouping if (true, uses the grouping character (',')
-     * to seperate groups in the integer portion of the number.
+     * to separate groups in the integer portion of the number.
      */
     fun toString(f: Int, minFracDigits: Int, maxFracDigits: Int, grouping: Boolean) = formatNumber(
             abs(toInt(f)),
@@ -232,7 +246,7 @@ object CoreMath {
      * @param maxFracDigits the maximum number of digits to show after
      * the decimal point.
      * @param grouping if (true, uses the grouping character (',')
-     * to seperate groups in the integer portion of the number.
+     * to separate groups in the integer portion of the number.
      */
     fun intToString(n: Int, minFracDigits: Int, maxFracDigits: Int, grouping: Boolean) = formatNumber(
             abs(n),
@@ -249,7 +263,7 @@ object CoreMath {
      * @param maxFracDigits the maximum number of digits to show after
      * the decimal point.
      * @param intPartGrouping if (true, uses the groupong character (',')
-     * to seperate groups in the integer portion of the number.
+     * to separate groups in the integer portion of the number.
      */
     private fun formatNumber(intPart2: Int, fracPart: Int, negative: Boolean,
                              minFracDigits: Int, maxFracDigits: Int, intPartGrouping: Boolean): String {
@@ -638,53 +652,55 @@ object CoreMath {
     /**
      * Returns the sine of the specified fixed-point radian value.
      */
-    fun sin(fx2: Int): Int {
-        var fx = fx2
+    fun sin(fx2: Int) = toFixed(Math.sin(fx2.toDouble()))
 
-        if (fx == 0) {
-            return 0
-        }
-
-        // reduce range to -2*pi and 2*pi
-        val s = fx / TWO_PI
-        if (abs(s) >= 1 shl TWO_PI_ERROR_FACTOR) {
-            // fix any error for large values of fx
-            fx -= s * TWO_PI + (s shr TWO_PI_ERROR_FACTOR) * TWO_PI_ERROR
-        } else {
-            fx -= s * TWO_PI
-        }
-
-        // reduce range to -pi/2 and pi/2
-        // this allows us to limit the number of iterations in the maclaurin series
-        if (fx > PI) {
-            fx -= -TWO_PI
-        } else if (fx < -PI) {
-            fx += TWO_PI
-        }
-        if (fx > ONE_HALF_PI) {
-            fx = PI - fx
-        } else if (fx < -ONE_HALF_PI) {
-            fx = -PI - fx
-        }
-
-        // Helps with rotation appearance near 90, 180, 270, 360, etc.
-        if (abs(fx) < 32) {
-            return 0
-        } else if (abs(fx - ONE_HALF_PI) < 32) {
-            return ONE
-        } else if (abs(fx + ONE_HALF_PI) < 32) {
-            return -ONE
-        }
-
-        // Maclaurin power series
-        val fxSquared = mul(fx, fx)
-        val d = mul((1 shl INTERNAL_BITS) / (2 * 3 * 4 * 5 * 6 * 7 * 8 * 9), fxSquared)
-        val c = mul(d - (1 shl INTERNAL_BITS) / (2 * 3 * 4 * 5 * 6 * 7), fxSquared)
-        val b = mul(c + (1 shl INTERNAL_BITS) / (2 * 3 * 4 * 5), fxSquared)
-        val a = mul(b - (1 shl INTERNAL_BITS) / (2 * 3), fxSquared)
-        val sine = mul(a + (1 shl INTERNAL_BITS), fx)
-        return sine shr INTERNAL_BITS - FRACTION_BITS
-    }
+//    fun sin(fx2: Int): Int {
+//        var fx = fx2
+//
+//        if (fx == 0) {
+//            return 0
+//        }
+//
+//        // reduce range to -2*pi and 2*pi
+//        val s = fx / TWO_PI
+//        if (abs(s) >= 1 shl TWO_PI_ERROR_FACTOR) {
+//            // fix any error for large values of fx
+//            fx -= s * TWO_PI + (s shr TWO_PI_ERROR_FACTOR) * TWO_PI_ERROR
+//        } else {
+//            fx -= s * TWO_PI
+//        }
+//
+//        // reduce range to -pi/2 and pi/2
+//        // this allows us to limit the number of iterations in the maclaurin series
+//        if (fx > PI) {
+//            fx -= -TWO_PI
+//        } else if (fx < -PI) {
+//            fx += TWO_PI
+//        }
+//        if (fx > ONE_HALF_PI) {
+//            fx = PI - fx
+//        } else if (fx < -ONE_HALF_PI) {
+//            fx = -PI - fx
+//        }
+//
+//        // Helps with rotation appearance near 90, 180, 270, 360, etc.
+//        if (abs(fx) < 32) {
+//            return 0
+//        } else if (abs(fx - ONE_HALF_PI) < 32) {
+//            return ONE
+//        } else if (abs(fx + ONE_HALF_PI) < 32) {
+//            return -ONE
+//        }
+//
+//        // Maclaurin power series
+//        val fxSquared = mul(fx, fx)
+//        val d = mul((1 shl INTERNAL_BITS) / (2 * 3 * 4 * 5 * 6 * 7 * 8 * 9), fxSquared)
+//        val c = mul(d - (1 shl INTERNAL_BITS) / (2 * 3 * 4 * 5 * 6 * 7), fxSquared)
+//        val b = mul(c + (1 shl INTERNAL_BITS) / (2 * 3 * 4 * 5), fxSquared)
+//        val a = mul(b - (1 shl INTERNAL_BITS) / (2 * 3), fxSquared)
+//        val sine = mul(a + (1 shl INTERNAL_BITS), fx)
+//        return sine shr INTERNAL_BITS - FRACTION_BITS
+//    }
 
     /**
      * Returns the cosine of the specified fixed-point radian value.
